@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useTTS } from '../hooks/useTTS'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
@@ -293,6 +293,7 @@ function PhraseQuestion({ phrase, allPhrases, onAnswer, isAnswered, selectedAnsw
 
 export default function PracticeMixed() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
@@ -309,7 +310,10 @@ export default function PracticeMixed() {
   const submitMutation = useMutation({
     mutationFn: (payload: { sessionId: string; mode: string; answers: Answer[] }) =>
       api.post('/practice/submit', payload),
-    onSuccess: () => showToast('Practice submitted!', 'success'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('Practice submitted!', 'success')
+    },
     onError: () => showToast('Failed to submit', 'error'),
   })
 

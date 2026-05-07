@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   show_etymology INTEGER DEFAULT 1,
   auto_play_audio INTEGER DEFAULT 0,
   keyboard_shortcuts INTEGER DEFAULT 1,
+  enabled_question_types TEXT DEFAULT 'zh-to-en,en-to-zh,fill-blank,listen',
   level TEXT DEFAULT 'intermediate',
   learning_goal TEXT DEFAULT 'exam'
 );
@@ -49,8 +50,10 @@ CREATE TABLE IF NOT EXISTS words (
   word_family_json TEXT,
   secondary_meaning_note TEXT,
   difficulty INTEGER DEFAULT 3,
-  frequency_rank INTEGER
+  frequency_rank INTEGER,
+  toeic_rank INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_words_toeic_rank ON words(toeic_rank);
 CREATE INDEX IF NOT EXISTS idx_words_word ON words(word);
 CREATE INDEX IF NOT EXISTS idx_words_difficulty ON words(difficulty);
 CREATE INDEX IF NOT EXISTS idx_words_frequency ON words(frequency_rank);
@@ -173,3 +176,14 @@ CREATE TABLE IF NOT EXISTS daily_activity (
   correct_count INTEGER DEFAULT 0,
   PRIMARY KEY (user_id, date)
 );
+
+-- User Bookmarks
+CREATE TABLE IF NOT EXISTS user_bookmarks (
+  user_id TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  item_id INTEGER NOT NULL,
+  bookmark_type TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, item_type, item_id, bookmark_type)
+);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON user_bookmarks(user_id, bookmark_type);

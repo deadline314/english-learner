@@ -1,12 +1,13 @@
 import { useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { showToast } from '../components/ui/Toaster'
 import { cn } from '../lib/utils'
 import { Check, X, ArrowRight, RotateCcw, Trophy, Clock, Target, BookOpen } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { BookmarkStar } from '../components/BookmarkStar'
 
 interface GrammarQuestion {
   id: number
@@ -42,6 +43,7 @@ const cardEntrance = {
 
 export default function PracticeGrammar() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
@@ -60,7 +62,10 @@ export default function PracticeGrammar() {
   const submitMutation = useMutation({
     mutationFn: (payload: { sessionId: string; mode: string; answers: Answer[] }) =>
       api.post('/practice/submit', payload),
-    onSuccess: () => showToast('Practice submitted!', 'success'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('Practice submitted!', 'success')
+    },
     onError: () => showToast('Failed to submit', 'error'),
   })
 
@@ -287,7 +292,15 @@ export default function PracticeGrammar() {
           <AnimatePresence>
             {showExplanation && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-card border border-border rounded-2xl p-5 space-y-3 overflow-hidden shadow-sm">
-                <h4 className="font-semibold text-foreground">Explanation</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-foreground">Explanation</h4>
+                  <div className="flex items-center gap-1">
+                    <BookmarkStar itemType="grammar" itemId={currentQuestion.id} bookmarkType="seen" label="看過" />
+                    {isCorrect === false && (
+                      <BookmarkStar itemType="grammar" itemId={currentQuestion.id} bookmarkType="wrong" label="錯題" />
+                    )}
+                  </div>
+                </div>
                 <p className="text-muted-foreground leading-relaxed">{currentQuestion.explanation}</p>
                 <button onClick={handleNext} className="w-full mt-3 py-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-all font-medium flex items-center justify-center gap-2">
                   {currentIndex < items.length - 1 ? (<>Next <ArrowRight className="w-4 h-4" /></>) : 'Finish'}

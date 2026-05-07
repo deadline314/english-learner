@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useTTS } from '../hooks/useTTS'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
@@ -9,6 +9,7 @@ import { cn } from '../lib/utils'
 import { Volume2, Check, X, ArrowRight, RotateCcw, Trophy, Clock, Target, Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { saveSession, loadSession, clearSession } from '../lib/session'
+import { BookmarkStar } from '../components/BookmarkStar'
 
 interface Word {
   wordId: number
@@ -106,6 +107,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 export default function PracticeWord() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { speak, stop, isSpeaking } = useTTS()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [questionType, setQuestionType] = useState<QuestionType>('zh-to-en')
@@ -120,6 +122,21 @@ export default function PracticeWord() {
   const [showTypeSelector, setShowTypeSelector] = useState(false)
   const [autoPlayReady, setAutoPlayReady] = useState(false)
 
+  const { data: userData } = useQuery<{ settings: { enabledQuestionTypes?: string } | null }>({
+    queryKey: ['user-me'],
+    queryFn: () => api.get('/user/me'),
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (userData?.settings?.enabledQuestionTypes) {
+      const types = userData.settings.enabledQuestionTypes.split(',').filter(
+        (t): t is QuestionType => BASE_QUESTION_TYPES.includes(t as QuestionType)
+      )
+      if (types.length > 0) setEnabledTypes(types)
+    }
+  }, [userData])
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['practice', 'word'],
     queryFn: () => api.get<PracticeResponse>('/practice/today?mode=word'),
@@ -130,6 +147,7 @@ export default function PracticeWord() {
       api.post('/practice/submit', payload),
     onSuccess: () => {
       clearSession('word')
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       showToast('Practice submitted!', 'success')
     },
     onError: () => showToast('Failed to submit', 'error'),
@@ -380,11 +398,13 @@ export default function PracticeWord() {
                   <button
                     key={type}
                     onClick={() => {
-                      setEnabledTypes((prev) =>
-                        prev.includes(type)
+                      setEnabledTypes((prev) => {
+                        const next = prev.includes(type)
                           ? prev.length > 1 ? prev.filter((t) => t !== type) : prev
                           : [...prev, type]
-                      )
+                        api.patch('/user/settings', { enabledQuestionTypes: next.join(',') })
+                        return next
+                      })
                     }}
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
@@ -557,14 +577,22 @@ export default function PracticeWord() {
             )}
           </AnimatePresence>
 
-          <AnimatePresence>
-            {showDetails && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-card border border-border rounded-2xl p-5 space-y-3 overflow-hidden shadow-sm">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xl font-bold text-foreground">{currentWord.word}</span>
-                  <span className="text-muted-foreground">{currentWord.phonetic}</span>
-                  <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded">{currentWord.partOfSpeech}</span>
-                </div>
+              <AnimatePresence>
+                {showDetails && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-card border border-border rounded-2xl p-5 space-y-3 overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-xl font-bold text-foreground">{currentWord.word}</span>
+                        <span className="text-muted-foreground">{currentWord.phonetic}</span>
+                        <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded">{currentWord.partOfSpeech}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <BookmarkStar itemType="word" itemId={currentWord.wordId} bookmarkType="seen" label="看過" />
+                        {isCorrect === false && (
+                          <BookmarkStar itemType="word" itemId={currentWord.wordId} bookmarkType="wrong" label="錯題" />
+                        )}
+                      </div>
+                    </div>
                 <div className="space-y-1">
                   {currentWord.definitions['zh-TW'].map((d, i) => (
                     <p key={i} className="text-foreground">{d}</p>

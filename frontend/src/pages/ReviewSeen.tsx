@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useTTS } from '../hooks/useTTS'
+import { showToast } from '../components/ui/Toaster'
 import { cn } from '../lib/utils'
 import {
-  Volume2, ChevronLeft, ChevronRight, BookOpen, Target, TrendingUp,
+  Volume2, ChevronLeft, ChevronRight, BookOpen, Target, TrendingUp, Star, X, Trash2,
 } from 'lucide-react'
 
 type TabType = 'word' | 'grammar' | 'phrase'
@@ -18,7 +19,21 @@ interface SeenItem {
   seenCount: number
   correctCount: number
   wrongCount: number
-  nextReview: string
+  nextReview: number
+}
+
+interface ApiSeenItem {
+  wordId: number
+  word: string
+  phonetic: string
+  partOfSpeech: string
+  definitions: { 'zh-TW'?: string[]; en?: string[] }
+  srsLevel: number
+  totalSeen: number
+  totalCorrect: number
+  totalWrong: number
+  lastSeenAt: number
+  nextReviewAt: number
 }
 
 interface SeenResponse {
@@ -54,17 +69,76 @@ export default function ReviewSeen() {
   const [type, setType] = useState<TabType>('word')
   const [level, setLevel] = useState<number | null>(null)
   const [page, setPage] = useState(1)
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<SeenItem | null>(null)
+  const [showClearAll, setShowClearAll] = useState(false)
 
+  const queryClient = useQueryClient()
   const { speak, isSpeaking } = useTTS()
 
   const { data, isLoading } = useQuery<SeenResponse>({
     queryKey: ['seen', type, level, page],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams({ type, page: String(page) })
       if (level !== null) params.set('srs_level', String(level))
-      return api.get(`/progress/seen?${params.toString()}`)
+      const raw = await api.get<{ items: ApiSeenItem[]; total: number; page: number; pageSize: number }>(`/progress/seen?${params.toString()}`)
+      return {
+        ...raw,
+        items: raw.items.map((item) => ({
+          id: String(item.wordId),
+          content: item.word,
+          phonetic: item.phonetic,
+          srsLevel: item.srsLevel,
+          seenCount: item.totalSeen,
+          correctCount: item.totalCorrect,
+          wrongCount: item.totalWrong,
+          nextReview: item.nextReviewAt,
+        })),
+      }
     },
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (item: SeenItem) => api.delete(`/progress/seen/${type}/${item.id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seen'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('已刪除', 'success')
+      setDeleteTarget(null)
+    },
+    onError: () => showToast('刪除失敗', 'error'),
+  })
+
+  const clearAllMutation = useMutation({
+    mutationFn: () => api.delete(`/progress/seen/clear/${type}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seen'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('已全部清空', 'success')
+      setShowClearAll(false)
+    },
+    onError: () => showToast('清空失敗', 'error'),
+  })
+
+  const toggleBookmark = async (item: SeenItem) => {
+    try {
+      const res = await api.post<{ bookmarked: boolean }>('/practice/bookmark', {
+        itemType: type,
+        itemId: Number(item.id),
+        bookmarkType: 'seen',
+      })
+      setBookmarkedIds((prev) => {
+        const next = new Set(prev)
+        if (res.bookmarked) next.add(item.id)
+        else next.delete(item.id)
+        return next
+      })
+      showToast(res.bookmarked ? '已收藏' : '已取消收藏', 'success')
+    } catch {
+      showToast('操作失敗', 'error')
+    }
+  }
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0
 
@@ -82,7 +156,18 @@ export default function ReviewSeen() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground">已看題目</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">已看題目</h1>
+        {data && data.items.length > 0 && (
+          <button
+            onClick={() => setShowClearAll(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-rose-300 dark:border-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl text-sm font-medium transition-all"
+          >
+            <Trash2 size={16} />
+            清空全部
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-xl p-4">
@@ -180,52 +265,77 @@ export default function ReviewSeen() {
         </motion.div>
       ) : (
         <div className="space-y-3">
-          {data.items.map((item, index) => (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.04 }}
-              className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-semibold text-foreground">{item.content}</span>
-                    {item.phonetic && (
-                      <span className="text-xs text-muted-foreground">/{item.phonetic}/</span>
-                    )}
-                    <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", getSrsColor(item.srsLevel))}>
-                      Lv.{item.srsLevel}
-                    </span>
+          <AnimatePresence mode="popLayout">
+            {data.items.map((item, index) => (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ delay: index * 0.04 }}
+                className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="font-semibold text-foreground">{item.content}</span>
+                      {item.phonetic && (
+                        <span className="text-xs text-muted-foreground">{item.phonetic}</span>
+                      )}
+                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", getSrsColor(item.srsLevel))}>
+                        Lv.{item.srsLevel}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                      <span>Seen <strong className="text-foreground">{item.seenCount}</strong> times</span>
+                      <span>Correct <strong className="text-emerald-600 dark:text-emerald-400">{item.correctCount}</strong></span>
+                      <span>Wrong <strong className="text-rose-600 dark:text-rose-400">{item.wrongCount}</strong></span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Next review: {item.nextReview ? new Date(item.nextReview * 1000).toLocaleDateString('zh-TW', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                      }) : 'N/A'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
-                    <span>Seen <strong className="text-foreground">{item.seenCount}</strong> times</span>
-                    <span>Correct <strong className="text-emerald-600 dark:text-emerald-400">{item.correctCount}</strong></span>
-                    <span>Wrong <strong className="text-rose-600 dark:text-rose-400">{item.wrongCount}</strong></span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Next review: {new Date(item.nextReview).toLocaleDateString('zh-TW', {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                    })}
-                  </p>
-                </div>
 
-                {type !== 'grammar' && (
-                  <button
-                    onClick={() => speak(item.content)}
-                    disabled={isSpeaking}
-                    className={cn(
-                      "p-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all shrink-0",
-                      isSpeaking && "animate-pulse ring-2 ring-primary/30"
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => toggleBookmark(item)}
+                      className={cn(
+                        "p-2 rounded-lg transition-all",
+                        bookmarkedIds.has(item.id)
+                          ? "text-amber-500 bg-amber-50 dark:bg-amber-900/20"
+                          : "text-muted-foreground hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                      )}
+                      title={bookmarkedIds.has(item.id) ? '取消收藏' : '收藏'}
+                    >
+                      <Star size={18} fill={bookmarkedIds.has(item.id) ? 'currentColor' : 'none'} />
+                    </button>
+                    {type !== 'grammar' && (
+                      <button
+                        onClick={() => { setSpeakingId(item.id); speak(item.content) }}
+                        disabled={isSpeaking}
+                        className={cn(
+                          "p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all",
+                          isSpeaking && speakingId === item.id && "animate-pulse ring-2 ring-primary/30"
+                        )}
+                      >
+                        <Volume2 size={18} />
+                      </button>
                     )}
-                  >
-                    <Volume2 size={18} />
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          ))}
+                    <button
+                      onClick={() => setDeleteTarget(item)}
+                      className="p-2 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                      title="刪除"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 
@@ -250,6 +360,91 @@ export default function ReviewSeen() {
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              className="bg-card border border-border rounded-xl p-6 max-w-sm mx-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-2">確認刪除</h3>
+              <p className="text-sm text-muted-foreground mb-1">
+                確定要刪除此學習紀錄嗎？該題目將回到「未學習」狀態。
+              </p>
+              <p className="text-sm font-medium text-foreground mb-5">
+                「{deleteTarget.content}」
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => deleteMutation.mutate(deleteTarget)}
+                  disabled={deleteMutation.isPending}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-rose-600 hover:bg-rose-700 text-white transition-colors shadow-sm"
+                >
+                  {deleteMutation.isPending ? '刪除中...' : '確認刪除'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showClearAll && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowClearAll(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              className="bg-card border border-border rounded-xl p-6 max-w-sm mx-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-2">清空全部紀錄</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                確定要清空所有「{TABS.find(t => t.key === type)?.label}」類型的學習紀錄嗎？所有題目將回到「未學習」狀態。此操作無法復原。
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowClearAll(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => clearAllMutation.mutate()}
+                  disabled={clearAllMutation.isPending}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-rose-600 hover:bg-rose-700 text-white transition-colors shadow-sm"
+                >
+                  {clearAllMutation.isPending ? '清空中...' : '確認清空'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

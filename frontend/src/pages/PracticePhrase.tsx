@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useTTS } from '../hooks/useTTS'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
@@ -8,6 +8,7 @@ import { showToast } from '../components/ui/Toaster'
 import { cn } from '../lib/utils'
 import { Volume2, Check, X, ArrowRight, Trophy, RotateCcw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { BookmarkStar } from '../components/BookmarkStar'
 
 interface Phrase {
   id: number
@@ -28,6 +29,7 @@ interface PhraseAnswer {
 
 export default function PracticePhrase() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { speak, isSpeaking } = useTTS()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<PhraseAnswer[]>([])
@@ -44,7 +46,10 @@ export default function PracticePhrase() {
 
   const submitMutation = useMutation({
     mutationFn: (payload: any) => api.post('/practice/submit', payload),
-    onSuccess: () => showToast('練習結果已儲存', 'success'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('練習結果已儲存', 'success')
+    },
   })
 
   const items = data?.items || []
@@ -273,7 +278,15 @@ export default function PracticePhrase() {
           {showResult && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
               <div className="bg-card rounded-xl p-5 border border-border space-y-3">
-                <h3 className="font-semibold">{currentItem.phrase}</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">{currentItem.phrase}</h3>
+                  <div className="flex items-center gap-1">
+                    <BookmarkStar itemType="phrase" itemId={currentItem.id} bookmarkType="seen" label="看過" />
+                    {selectedOption !== correctAnswer && (
+                      <BookmarkStar itemType="phrase" itemId={currentItem.id} bookmarkType="wrong" label="錯題" />
+                    )}
+                  </div>
+                </div>
                 <p className="text-sm text-muted-foreground">{currentItem.meaningZh} — {currentItem.meaningEn}</p>
                 {currentItem.examples.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-border">

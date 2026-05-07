@@ -29,6 +29,7 @@ interface UserSettings {
   accent: Accent
   autoPlayAudio: boolean
   keyboardShortcuts: boolean
+  enabledQuestionTypes: string
 }
 
 interface UserProfile {
@@ -258,6 +259,47 @@ export default function Settings() {
 
           <Toggle label="Show Phonetic" checked={localSettings.showPhonetic} onChange={(v) => updateSetting('showPhonetic', v)} />
           <Toggle label="Show Etymology / Word Analysis" checked={localSettings.showEtymology} onChange={(v) => updateSetting('showEtymology', v)} />
+        </div>
+      </Section>
+
+      <Section title="Practice Question Types" variants={itemVariants}>
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Select the question types you want to practice. At least one must be enabled.</p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { value: 'zh-to-en', label: '中文 → English' },
+              { value: 'en-to-zh', label: 'English → 中文' },
+              { value: 'fill-blank', label: 'Fill in the Blank' },
+              { value: 'listen', label: 'Listening' },
+            ] as const).map(({ value, label }) => {
+              const types = (localSettings.enabledQuestionTypes || 'zh-to-en,en-to-zh,fill-blank,listen').split(',')
+              const isEnabled = types.includes(value)
+              return (
+                <button
+                  key={value}
+                  onClick={() => {
+                    const current = types.filter(Boolean)
+                    let next: string[]
+                    if (isEnabled) {
+                      if (current.length <= 1) return
+                      next = current.filter((t) => t !== value)
+                    } else {
+                      next = [...current, value]
+                    }
+                    updateSetting('enabledQuestionTypes', next.join(','))
+                  }}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
+                    isEnabled
+                      ? "border-indigo-500 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 dark:border-indigo-500 shadow-sm shadow-indigo-500/10"
+                      : "border-border text-muted-foreground hover:border-indigo-300 hover:text-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </Section>
 

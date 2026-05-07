@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { api } from '../lib/api'
 import {
   LayoutDashboard, BookOpen, Languages, MessageSquare, Shuffle,
-  XCircle, Eye, BarChart3, Settings, LogOut, Menu, X, Library
+  XCircle, Eye, BarChart3, Settings, LogOut, Menu, X, Library, Zap, Star
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '../lib/utils'
@@ -15,7 +15,9 @@ const navItems = [
   { path: '/practice/word', icon: BookOpen, label: '單字練習' },
   { path: '/practice/grammar', icon: Languages, label: '文法練習' },
   { path: '/practice/phrase', icon: MessageSquare, label: '片語練習' },
+  { path: '/practice/toeic', icon: Zap, label: 'TOEIC 精選' },
   { path: '/practice/mixed', icon: Shuffle, label: '綜合練習' },
+  { path: '/bookmarks', icon: Star, label: '我的收藏' },
   { path: '/review/wrong', icon: XCircle, label: '錯題本' },
   { path: '/review/seen', icon: Eye, label: '已看題目' },
   { path: '/stats', icon: BarChart3, label: '學習統計' },

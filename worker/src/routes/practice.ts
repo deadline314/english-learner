@@ -162,6 +162,45 @@ practiceRoutes.get('/today', async (c) => {
     return c.json({ items, sessionId: crypto.randomUUID(), mode: 'mixed' })
   }
 
+  if (mode === 'toeic') {
+    const dueWords = await c.env.DB.prepare(
+      `SELECT w.* FROM words w
+       JOIN user_word_progress p ON w.word_id = p.word_id
+       WHERE p.user_id = ? AND p.next_review_at <= ? AND w.toeic_rank IS NOT NULL
+       ORDER BY w.toeic_rank ASC LIMIT ?`
+    ).bind(userId, now, DAILY_LIMIT).all()
+
+    let items = dueWords.results || []
+
+    if (items.length < DAILY_LIMIT) {
+      const remaining = DAILY_LIMIT - items.length
+      const newWords = await c.env.DB.prepare(
+        `SELECT * FROM words WHERE toeic_rank IS NOT NULL AND word_id NOT IN
+         (SELECT word_id FROM user_word_progress WHERE user_id = ?)
+         ORDER BY toeic_rank ASC LIMIT ?`
+      ).bind(userId, remaining).all()
+      items = [...items, ...(newWords.results || [])]
+    }
+
+    const formatted = items.map((w: any) => ({
+      wordId: w.word_id,
+      word: w.word,
+      phonetic: w.phonetic,
+      partOfSpeech: w.part_of_speech,
+      definitions: JSON.parse(w.definitions_json || '{}'),
+      analysis: w.analysis_json ? JSON.parse(w.analysis_json) : null,
+      collocation: w.collocation,
+      examples: JSON.parse(w.examples_json || '[]'),
+      wordFamily: JSON.parse(w.word_family_json || '{}'),
+      secondaryMeaningNote: w.secondary_meaning_note || null,
+      difficulty: w.difficulty,
+      frequencyRank: w.frequency_rank,
+      toeicRank: w.toeic_rank,
+    }))
+
+    return c.json({ items: formatted, sessionId: crypto.randomUUID(), mode: 'toeic' })
+  }
+
   return c.json({ error: '無效的模式' }, 400)
 })
 
@@ -400,4 +439,118 @@ practiceRoutes.get('/words', async (c) => {
   }))
 
   return c.json({ words, total, page, totalPages })
+})
+
+practiceRoutes.post('/bookmark', async (c) => {
+  const userId = c.get('userId')
+  const { itemType, itemId, bookmarkType } = await c.req.json<{
+    itemType: string
+    itemId: number
+    bookmarkType: 'seen' | 'wrong'
+  }>()
+
+  const existing = await c.env.DB.prepare(
+    'SELECT 1 FROM user_bookmarks WHERE user_id = ? AND item_type = ? AND item_id = ? AND bookmark_type = ?'
+  ).bind(userId, itemType, itemId, bookmarkType).first()
+
+  if (existing) {
+    await c.env.DB.prepare(
+      'DELETE FROM user_bookmarks WHERE user_id = ? AND item_type = ? AND item_id = ? AND bookmark_type = ?'
+    ).bind(userId, itemType, itemId, bookmarkType).run()
+    return c.json({ bookmarked: false })
+  }
+
+  await c.env.DB.prepare(
+    'INSERT INTO user_bookmarks (user_id, item_type, item_id, bookmark_type, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(userId, itemType, itemId, bookmarkType, Math.floor(Date.now() / 1000)).run()
+  return c.json({ bookmarked: true })
+})
+
+practiceRoutes.get('/bookmarks', async (c) => {
+  const userId = c.get('userId')
+  const type = c.req.query('type') || 'seen'
+
+  const bookmarks = await c.env.DB.prepare(
+    `SELECT b.item_type, b.item_id, b.created_at FROM user_bookmarks b
+     WHERE b.user_id = ? AND b.bookmark_type = ?
+     ORDER BY b.created_at DESC`
+  ).bind(userId, type).all()
+
+  const rows = bookmarks.results || []
+  const wordIds = rows.filter(r => (r as any).item_type === 'word').map(r => (r as any).item_id)
+  const grammarIds = rows.filter(r => (r as any).item_type === 'grammar').map(r => (r as any).item_id)
+  const phraseIds = rows.filter(r => (r as any).item_type === 'phrase').map(r => (r as any).item_id)
+
+  const [words, grammar, phrases] = await Promise.all([
+    wordIds.length > 0
+      ? c.env.DB.prepare(`SELECT * FROM words WHERE word_id IN (${wordIds.join(',')})`).all()
+      : Promise.resolve({ results: [] }),
+    grammarIds.length > 0
+      ? c.env.DB.prepare(`SELECT gq.*, gt.title as topic_title FROM grammar_questions gq JOIN grammar_topics gt ON gq.topic_id = gt.id WHERE gq.id IN (${grammarIds.join(',')})`).all()
+      : Promise.resolve({ results: [] }),
+    phraseIds.length > 0
+      ? c.env.DB.prepare(`SELECT * FROM phrases WHERE id IN (${phraseIds.join(',')})`).all()
+      : Promise.resolve({ results: [] }),
+  ])
+
+  const wordMap = new Map((words.results || []).map((w: any) => [w.word_id, w]))
+  const grammarMap = new Map((grammar.results || []).map((g: any) => [g.id, g]))
+  const phraseMap = new Map((phrases.results || []).map((p: any) => [p.id, p]))
+
+  const items = rows.map((b: any) => {
+    if (b.item_type === 'word') {
+      const w = wordMap.get(b.item_id) as any
+      if (!w) return null
+      return {
+        bookmarkType: type, itemType: 'word', createdAt: b.created_at,
+        item: {
+          wordId: w.word_id, word: w.word, phonetic: w.phonetic, partOfSpeech: w.part_of_speech,
+          definitions: JSON.parse(w.definitions_json || '{}'),
+          collocation: w.collocation, examples: JSON.parse(w.examples_json || '[]'),
+          wordFamily: JSON.parse(w.word_family_json || '{}'),
+          secondaryMeaningNote: w.secondary_meaning_note || null,
+          difficulty: w.difficulty, toeicRank: w.toeic_rank,
+        },
+      }
+    }
+    if (b.item_type === 'grammar') {
+      const g = grammarMap.get(b.item_id) as any
+      if (!g) return null
+      return {
+        bookmarkType: type, itemType: 'grammar', createdAt: b.created_at,
+        item: {
+          id: g.id, topicTitle: g.topic_title, questionType: g.question_type,
+          question: g.question, options: JSON.parse(g.options_json || '[]'),
+          correctAnswer: g.correct_answer, explanation: g.explanation,
+        },
+      }
+    }
+    if (b.item_type === 'phrase') {
+      const p = phraseMap.get(b.item_id) as any
+      if (!p) return null
+      return {
+        bookmarkType: type, itemType: 'phrase', createdAt: b.created_at,
+        item: {
+          id: p.id, phrase: p.phrase, meaningZh: p.meaning_zh, meaningEn: p.meaning_en,
+          examples: JSON.parse(p.examples_json || '[]'), category: p.category,
+        },
+      }
+    }
+    return null
+  }).filter(Boolean)
+
+  return c.json({ items, type })
+})
+
+practiceRoutes.get('/bookmarks/status', async (c) => {
+  const userId = c.get('userId')
+  const itemType = c.req.query('itemType') || 'word'
+  const itemId = Number(c.req.query('itemId'))
+
+  const rows = await c.env.DB.prepare(
+    'SELECT bookmark_type FROM user_bookmarks WHERE user_id = ? AND item_type = ? AND item_id = ?'
+  ).bind(userId, itemType, itemId).all()
+
+  const types = new Set((rows.results || []).map((r: any) => r.bookmark_type))
+  return c.json({ seen: types.has('seen'), wrong: types.has('wrong') })
 })

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useNavigate } from 'react-router-dom'
-import { Flame, BookOpen, MessageSquare, Sparkles, ArrowRight, X, Trophy, CalendarDays } from 'lucide-react'
+import { Flame, BookOpen, MessageSquare, Sparkles, ArrowRight, X, Trophy, CalendarDays, Zap, Star } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 interface DashboardData {
@@ -186,6 +186,8 @@ export default function Dashboard() {
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: () => api.get('/progress/dashboard'),
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   if (isLoading || !data) return <LoadingSkeleton />
@@ -273,6 +275,39 @@ export default function Dashboard() {
       >
         Start Mixed Practice
       </motion.button>
+
+      <motion.div
+        className="grid grid-cols-2 gap-3"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45 }}
+      >
+        <motion.button
+          className="relative p-5 rounded-xl border text-left bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-400/30 shadow-sm hover:shadow-md cursor-pointer transition-shadow"
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+          onClick={() => navigate('/practice/toeic')}
+        >
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3 border border-amber-400/30 bg-amber-500/10">
+            <Zap className="w-5 h-5 text-amber-500" />
+          </div>
+          <h3 className="font-semibold text-lg text-foreground">TOEIC 精選</h3>
+          <p className="text-sm text-muted-foreground mt-1">1000 個高頻單字</p>
+          <ArrowRight className="absolute top-5 right-5 w-4 h-4 opacity-40 text-amber-500" />
+        </motion.button>
+
+        <motion.button
+          className="relative p-5 rounded-xl border text-left bg-gradient-to-br from-rose-500/10 to-rose-600/5 border-rose-400/20 shadow-sm hover:shadow-md cursor-pointer transition-shadow"
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+          onClick={() => navigate('/bookmarks')}
+        >
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3 border border-rose-400/30 bg-rose-500/10">
+            <Star className="w-5 h-5 text-amber-500" />
+          </div>
+          <h3 className="font-semibold text-lg text-foreground">我的收藏</h3>
+          <p className="text-sm text-muted-foreground mt-1">看過 · 錯題</p>
+          <ArrowRight className="absolute top-5 right-5 w-4 h-4 opacity-40 text-rose-400" />
+        </motion.button>
+      </motion.div>
 
       <motion.div
         className="bg-card border border-border rounded-xl p-6 shadow-sm space-y-3"

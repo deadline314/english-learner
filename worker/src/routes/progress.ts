@@ -117,6 +117,7 @@ progressRoutes.get('/wrong', async (c) => {
       definitions: r.definitions_json ? JSON.parse(r.definitions_json) : null,
       question: r.question,
       explanation: r.explanation,
+      grammarCorrect: r.grammar_correct,
       phrase: r.phrase,
       meaningZh: r.meaning_zh,
     })),
@@ -126,10 +127,53 @@ progressRoutes.get('/wrong', async (c) => {
   })
 })
 
+progressRoutes.delete('/wrong/clear/:type', async (c) => {
+  const userId = c.get('userId')
+  const type = c.req.param('type')
+  await c.env.DB.prepare('DELETE FROM wrong_answers WHERE user_id = ? AND item_type = ?').bind(userId, type).run()
+  return c.json({ success: true })
+})
+
+progressRoutes.delete('/seen/clear/:type', async (c) => {
+  const userId = c.get('userId')
+  const type = c.req.param('type')
+
+  if (type === 'word') {
+    await c.env.DB.prepare('DELETE FROM user_word_progress WHERE user_id = ?').bind(userId).run()
+  } else if (type === 'grammar') {
+    await c.env.DB.prepare('DELETE FROM user_grammar_progress WHERE user_id = ?').bind(userId).run()
+  } else if (type === 'phrase') {
+    await c.env.DB.prepare('DELETE FROM user_phrase_progress WHERE user_id = ?').bind(userId).run()
+  }
+  return c.json({ success: true })
+})
+
 progressRoutes.post('/wrong/:id/master', async (c) => {
   const userId = c.get('userId')
   const id = c.req.param('id')
   await c.env.DB.prepare('UPDATE wrong_answers SET mastered = 1 WHERE id = ? AND user_id = ?').bind(id, userId).run()
+  return c.json({ success: true })
+})
+
+progressRoutes.delete('/wrong/:id', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  await c.env.DB.prepare('DELETE FROM wrong_answers WHERE id = ? AND user_id = ?').bind(id, userId).run()
+  return c.json({ success: true })
+})
+
+progressRoutes.delete('/seen/:type/:id', async (c) => {
+  const userId = c.get('userId')
+  const type = c.req.param('type')
+  const id = c.req.param('id')
+
+  if (type === 'word') {
+    await c.env.DB.prepare('DELETE FROM user_word_progress WHERE user_id = ? AND word_id = ?').bind(userId, Number(id)).run()
+  } else if (type === 'grammar') {
+    await c.env.DB.prepare('DELETE FROM user_grammar_progress WHERE user_id = ? AND question_id = ?').bind(userId, Number(id)).run()
+  } else if (type === 'phrase') {
+    await c.env.DB.prepare('DELETE FROM user_phrase_progress WHERE user_id = ? AND phrase_id = ?').bind(userId, Number(id)).run()
+  }
   return c.json({ success: true })
 })
 

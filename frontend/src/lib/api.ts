@@ -67,6 +67,18 @@ class ApiClient {
     return res.json()
   }
 
+  async delete<T>(path: string): Promise<T> {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error((data as any).error || `HTTP ${res.status}`)
+    }
+    return res.json()
+  }
+
   async upload<T>(path: string, formData: FormData): Promise<T> {
     const headers: HeadersInit = {}
     const token = useAuthStore.getState().token

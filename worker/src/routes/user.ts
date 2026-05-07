@@ -36,6 +36,7 @@ userRoutes.get('/me', async (c) => {
       showEtymology: !!(settings as any).show_etymology,
       autoPlayAudio: !!(settings as any).auto_play_audio,
       keyboardShortcuts: !!(settings as any).keyboard_shortcuts,
+      enabledQuestionTypes: (settings as any).enabled_question_types || 'zh-to-en,en-to-zh,fill-blank,listen',
       level: (settings as any).level,
       learningGoal: (settings as any).learning_goal,
     } : null,
@@ -56,6 +57,7 @@ userRoutes.patch('/settings', async (c) => {
     showEtymology: 'show_etymology',
     autoPlayAudio: 'auto_play_audio',
     keyboardShortcuts: 'keyboard_shortcuts',
+    enabledQuestionTypes: 'enabled_question_types',
     level: 'level',
     learningGoal: 'learning_goal',
   }

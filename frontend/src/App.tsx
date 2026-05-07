@@ -18,6 +18,8 @@ import ReviewSeen from './pages/ReviewSeen'
 import Stats from './pages/Stats'
 import Settings from './pages/Settings'
 import WordList from './pages/WordList'
+import Bookmarks from './pages/Bookmarks'
+import PracticeToeic from './pages/PracticeToeic'
 import { Toaster } from './components/ui/Toaster'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,8 +59,10 @@ export default function App() {
             <Route path="practice/grammar" element={<PracticeGrammar />} />
             <Route path="practice/phrase" element={<PracticePhrase />} />
             <Route path="practice/mixed" element={<PracticeMixed />} />
+            <Route path="practice/toeic" element={<PracticeToeic />} />
             <Route path="review/wrong" element={<ReviewWrong />} />
             <Route path="review/seen" element={<ReviewSeen />} />
+            <Route path="bookmarks" element={<Bookmarks />} />
             <Route path="stats" element={<Stats />} />
             <Route path="words" element={<WordList />} />
             <Route path="settings" element={<Settings />} />
