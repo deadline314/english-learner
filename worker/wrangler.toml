@@ -1,0 +1,33 @@
+name = "english-learner"
+main = "src/index.ts"
+compatibility_date = "2024-06-14"
+account_id = "72190f5873bf844676c671d0fb30d8be"
+workers_dev = true
+preview_urls = false
+routes = [
+  { pattern = "english-learner.org", custom_domain = true },
+  { pattern = "www.english-learner.org", custom_domain = true }
+]
+
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+html_handling = "drop-trailing-slash"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "english-learner-db"
+database_id = "ff6a3264-858f-4fa6-bdec-2eadb21b71c1"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "bfd85108ecc9455da88fedda0a3e58ce"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "english-learner-avatars"
+
+[vars]
+RESEND_FROM = "noreply@english-learner.org"
+FRONTEND_URL = "https://english-learner.org"

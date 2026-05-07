@@ -1,0 +1,9 @@
+{
+  "name": "english-learner-shared",
+  "private": true,
+  "type": "module",
+  "main": "schemas.ts",
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}
